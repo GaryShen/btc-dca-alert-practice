@@ -1,0 +1,24 @@
+# 金鑰與環境變數：永遠不要推上 GitHub（.env.example 範本可以）
+.env
+.env.*
+!.env.example
+
+# 套件與建置產物
+node_modules/
+dist/
+build/
+.next/
+out/
+.vercel/
+.supabase/
+coverage/
+
+# 紀錄檔
+*.log
+npm-debug.log*
+
+# 系統與編輯器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

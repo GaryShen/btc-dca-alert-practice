@@ -1,0 +1,1237 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC 定投回算</title>
+<style>
+  :root {
+    --bg: #F4F3EF; --card: #FFFFFF; --ink: #1B1D1F; --muted: #4A4F55; --label: #33373C;
+    --line: #DADCD6; --line-soft: #ECEDE9; --field: #B9BDB7; --accent: #1F4E8C;
+    --note: #ECEBE5; --err-bg: #FCEDEC; --err-line: #E3A6A1; --err: #8E1B14;
+    --ok-bg: #E7F2EA; --ok: #1D5C34;
+    --sans: "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.6; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 40px 16px 64px; display: flex; flex-direction: column; gap: 24px; }
+  h1 { margin: 0; font-size: 30px; line-height: 1.25; letter-spacing: .02em; }
+  h2 { margin: 0; font-size: 18px; }
+  h3 { margin: 0; font-size: 17px; }
+  p { margin: 0; }
+  .lead { color: var(--muted); max-width: 640px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+  /* 欄位從上面對齊：選單下面多一行「資料來源」時，同一列的標籤和輸入框才不會被拉歪；按鈕對齊輸入框 */
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 16px 20px; align-items: start; }
+  .fields > button { align-self: end; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 14px; font-weight: 500; color: var(--label); }
+  input, select { height: 44px; border: 1px solid var(--field); border-radius: 8px; padding: 0 12px; font: inherit; color: var(--ink); background: #fff; width: 100%; }
+  input[type=number] { font-family: var(--mono); }
+  button { height: 44px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 700; letter-spacing: .1em; padding: 0 24px; cursor: pointer; }
+  button:hover { background: #163a69; }
+  button.secondary { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+  button.secondary:hover { background: var(--line-soft); }
+  button:disabled, button:disabled:hover { opacity: .5; cursor: not-allowed; }
+  input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .hint { font-size: 14px; color: var(--muted); }
+  .alert { background: var(--err-bg); border: 1px solid var(--err-line); border-radius: 10px; padding: 14px 16px; color: var(--err); font-weight: 500; }
+  .row-between { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px 24px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; }
+  dl { margin: 0; }
+  dl div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+  dt { font-size: 15px; color: var(--muted); }
+  dd { margin: 0; font-family: var(--mono); font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+  .note { background: var(--note); border-radius: 10px; padding: 12px 16px; font-size: 14px; color: var(--label); }
+  .table-panel { padding: 20px 0 8px; }
+  .table-panel > .row-between { padding: 0 24px; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 15px; }
+  th { background: var(--bg); color: var(--label); font-weight: 500; padding: 10px 12px; text-align: right; white-space: nowrap; }
+  td { padding: 10px 12px; text-align: right; white-space: nowrap; border-top: 1px solid var(--line-soft); font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; padding-left: 24px; }
+  th:last-child, td:last-child { padding-right: 24px; }
+  td.boost { font-weight: 700; }
+  .tag { display: inline-block; font-size: 14px; font-weight: 700; border-radius: 999px; padding: 2px 12px; background: #FFF1D6; color: #7A4300; border: 1px solid #E8C27A; }
+  .pass { color: var(--ok); font-weight: 700; }
+  .fail { color: var(--err); font-weight: 700; background: var(--err-bg); }
+  .summary { border-radius: 10px; padding: 14px 16px; font-weight: 700; }
+  .summary.ok { background: var(--ok-bg); color: var(--ok); }
+  .summary.bad { background: var(--err-bg); color: var(--err); border: 1px solid var(--err-line); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- 完整價格資料（由 data/btc_weekly.csv 內嵌；改了 CSV 要重新內嵌） -->
+<script type="text/csv" id="btc-data">
+date,price_usd
+2017-01-02,997
+2017-01-09,910
+2017-01-16,822
+2017-01-23,922
+2017-01-30,912
+2017-02-06,1011
+2017-02-13,1001
+2017-02-20,1051
+2017-02-27,1180
+2017-03-06,1271
+2017-03-13,1228
+2017-03-20,1011
+2017-03-27,959
+2017-04-03,1080
+2017-04-10,1206
+2017-04-17,1161
+2017-04-24,1241
+2017-05-01,1355
+2017-05-08,1559
+2017-05-15,1780
+2017-05-22,2018
+2017-05-29,2177
+2017-06-05,2530
+2017-06-12,2955
+2017-06-19,2522
+2017-06-26,2502
+2017-07-03,2513
+2017-07-10,2510
+2017-07-17,1911
+2017-07-24,2748
+2017-07-31,2739
+2017-08-07,3210
+2017-08-14,4074
+2017-08-21,4055
+2017-08-28,4339
+2017-09-04,4604
+2017-09-11,4233
+2017-09-18,3679
+2017-09-25,3666
+2017-10-02,4405
+2017-10-09,4606
+2017-10-16,5692
+2017-10-23,5982
+2017-10-30,6136
+2017-11-06,7393
+2017-11-13,5890
+2017-11-20,8050
+2017-11-27,9312
+2017-12-04,11180
+2017-12-11,15069
+2017-12-18,18905
+2017-12-25,13554
+2018-01-01,13796
+2018-01-08,16193
+2018-01-15,13584
+2018-01-22,11513
+2018-01-29,11742
+2018-02-05,8202
+2018-02-12,8068
+2018-02-19,10392
+2018-02-26,9582
+2018-03-05,11517
+2018-03-12,9539
+2018-03-19,8214
+2018-03-26,8458
+2018-04-02,6828
+2018-04-09,7030
+2018-04-16,8368
+2018-04-23,8813
+2018-04-30,9398
+2018-05-07,9631
+2018-05-14,8691
+2018-05-21,8521
+2018-05-28,7345
+2018-06-04,7714
+2018-06-11,6762
+2018-06-18,6446
+2018-06-25,6157
+2018-07-02,6366
+2018-07-09,6724
+2018-07-16,6348
+2018-07-23,7407
+2018-07-30,8221
+2018-08-06,7032
+2018-08-13,6313
+2018-08-20,6487
+2018-08-27,6708
+2018-09-03,7292
+2018-09-10,6241
+2018-09-17,6497
+2018-09-24,6706
+2018-10-01,6611
+2018-10-08,6589
+2018-10-15,6265
+2018-10-22,6505
+2018-10-29,6449
+2018-11-05,6454
+2018-11-12,6409
+2018-11-19,5616
+2018-11-26,4011
+2018-12-03,4141
+2018-12-10,3588
+2018-12-17,3247
+2018-12-24,3995
+2018-12-31,3865
+2019-01-07,4072
+2019-01-14,3532
+2019-01-21,3549
+2019-01-28,3555
+2019-02-04,3456
+2019-02-11,3686
+2019-02-18,3671
+2019-02-25,3767
+2019-03-04,3815
+2019-03-11,3928
+2019-03-18,3995
+2019-03-25,3994
+2019-04-01,4114
+2019-04-08,5189
+2019-04-15,5153
+2019-04-22,5282
+2019-04-29,5301
+2019-05-06,5718
+2019-05-13,6979
+2019-05-20,8194
+2019-05-27,8744
+2019-06-03,8739
+2019-06-10,7641
+2019-06-17,8979
+2019-06-24,10814
+2019-07-01,10738
+2019-07-08,11477
+2019-07-15,10187
+2019-07-22,10587
+2019-07-29,9530
+2019-08-05,10980
+2019-08-12,11567
+2019-08-19,10318
+2019-08-26,10135
+2019-09-02,9770
+2019-09-09,10406
+2019-09-16,10310
+2019-09-23,10033
+2019-09-30,8057
+2019-10-07,7870
+2019-10-14,8284
+2019-10-21,8231
+2019-10-28,9552
+2019-11-04,9206
+2019-11-11,9037
+2019-11-18,8504
+2019-11-25,6907
+2019-12-02,7403
+2019-12-09,7522
+2019-12-16,7111
+2019-12-23,7514
+2019-12-30,7385
+2020-01-06,7352
+2020-01-13,8174
+2020-01-20,8703
+2020-01-27,8588
+2020-02-03,9315
+2020-02-10,10162
+2020-02-17,9938
+2020-02-24,9989
+2020-03-02,8534
+2020-03-09,8039
+2020-03-16,5348
+2020-03-23,5823
+2020-03-30,5885
+2020-04-06,6777
+2020-04-13,6915
+2020-04-20,7130
+2020-04-27,7699
+2020-05-04,8904
+2020-05-11,8754
+2020-05-18,9669
+2020-05-25,8731
+2020-06-01,9451
+2020-06-08,9754
+2020-06-15,9330
+2020-06-22,9285
+2020-06-29,9127
+2020-07-06,9089
+2020-07-13,9296
+2020-07-20,9215
+2020-07-27,9939
+2020-08-03,11078
+2020-08-10,11684
+2020-08-17,11914
+2020-08-24,11653
+2020-08-31,11708
+2020-09-07,10255
+2020-09-14,10331
+2020-09-21,10920
+2020-09-28,10774
+2020-10-05,10673
+2020-10-12,11377
+2020-10-19,11508
+2020-10-26,13037
+2020-11-02,13759
+2020-11-09,15491
+2020-11-16,15968
+2020-11-23,18422
+2020-11-30,18192
+2020-12-07,19378
+2020-12-14,19164
+2020-12-21,23491
+2020-12-28,26247
+2021-01-04,33001
+2021-01-11,38240
+2021-01-18,35793
+2021-01-25,32277
+2021-02-01,33136
+2021-02-08,38928
+2021-02-15,48720
+2021-02-22,57488
+2021-03-01,45114
+2021-03-08,51170
+2021-03-15,59133
+2021-03-22,57411
+2021-03-29,55784
+2021-04-05,58207
+2021-04-12,59965
+2021-04-19,56251
+2021-04-26,49076
+2021-05-03,56610
+2021-05-10,58281
+2021-05-17,46442
+2021-05-24,34755
+2021-05-31,35685
+2021-06-07,35816
+2021-06-14,39067
+2021-06-21,35592
+2021-06-28,34644
+2021-07-05,35309
+2021-07-12,34228
+2021-07-19,31783
+2021-07-26,35365
+2021-08-02,40000
+2021-08-09,43816
+2021-08-16,47056
+2021-08-23,49336
+2021-08-30,48807
+2021-09-06,51769
+2021-09-13,46059
+2021-09-20,47249
+2021-09-27,43183
+2021-10-04,48206
+2021-10-11,54626
+2021-10-18,61546
+2021-10-25,60884
+2021-11-01,61373
+2021-11-08,63293
+2021-11-15,65469
+2021-11-22,58756
+2021-11-29,57292
+2021-12-06,49380
+2021-12-13,50117
+2021-12-20,46689
+2021-12-27,50801
+2022-01-03,47328
+2022-01-10,41864
+2022-01-17,43102
+2022-01-24,36281
+2022-01-31,37919
+2022-02-07,42451
+2022-02-14,42105
+2022-02-21,38382
+2022-02-28,37705
+2022-03-07,38408
+2022-03-14,37820
+2022-03-21,41251
+2022-03-28,46859
+2022-04-04,46426
+2022-04-11,42144
+2022-04-18,39711
+2022-04-25,39466
+2022-05-02,38475
+2022-05-09,34082
+2022-05-16,31277
+2022-05-23,30279
+2022-05-30,29449
+2022-06-06,29901
+2022-06-13,26593
+2022-06-20,20540
+2022-06-27,21020
+2022-07-04,19289
+2022-07-11,20835
+2022-07-18,20774
+2022-07-25,22582
+2022-08-01,23326
+2022-08-08,23174
+2022-08-15,24315
+2022-08-22,21521
+2022-08-29,19550
+2022-09-05,19995
+2022-09-12,21795
+2022-09-19,19416
+2022-09-26,18808
+2022-10-03,19050
+2022-10-10,19442
+2022-10-17,19266
+2022-10-24,19566
+2022-10-31,20629
+2022-11-07,20920
+2022-11-14,16310
+2022-11-21,16260
+2022-11-28,16420
+2022-12-05,17118
+2022-12-12,17099
+2022-12-19,16746
+2022-12-26,16827
+2023-01-02,16614
+2023-01-09,17108
+2023-01-16,20881
+2023-01-23,22724
+2023-01-30,23756
+2023-02-06,22937
+2023-02-13,21787
+2023-02-20,24290
+2023-02-27,23563
+2023-03-06,22428
+2023-03-13,22205
+2023-03-20,28046
+2023-03-27,28000
+2023-04-03,28185
+2023-04-10,28336
+2023-04-17,30315
+2023-04-24,27591
+2023-05-01,29264
+2023-05-08,28457
+2023-05-15,26926
+2023-05-22,26757
+2023-05-29,28083
+2023-06-05,27125
+2023-06-12,25933
+2023-06-19,26337
+2023-06-26,30459
+2023-07-03,30618
+2023-07-10,30215
+2023-07-17,30240
+2023-07-24,30082
+2023-07-31,29275
+2023-08-07,29041
+2023-08-14,29284
+2023-08-21,26190
+2023-08-28,26089
+2023-09-04,25969
+2023-09-11,25833
+2023-09-18,26537
+2023-09-25,26253
+2023-10-02,27984
+2023-10-09,27937
+2023-10-16,27168
+2023-10-23,29991
+2023-10-30,34532
+2023-11-06,35048
+2023-11-13,37059
+2023-11-20,37396
+2023-11-27,37469
+2023-12-04,39976
+2023-12-11,43788
+2023-12-18,41342
+2023-12-25,43013
+2024-01-01,42250
+2024-01-08,43928
+2024-01-15,41716
+2024-01-22,41558
+2024-01-29,42031
+2024-02-05,42576
+2024-02-12,48302
+2024-02-19,52129
+2024-02-26,51728
+2024-03-04,63168
+2024-03-11,69027
+2024-03-18,68359
+2024-03-25,67226
+2024-04-01,71332
+2024-04-08,69374
+2024-04-15,65735
+2024-04-22,64950
+2024-04-29,63113
+2024-05-06,64045
+2024-05-13,61449
+2024-05-20,66266
+2024-05-27,68487
+2024-06-03,67752
+2024-06-10,69645
+2024-06-17,66637
+2024-06-24,63167
+2024-07-01,62676
+2024-07-08,55849
+2024-07-15,60798
+2024-07-22,68156
+2024-07-29,68257
+2024-08-05,58116
+2024-08-12,58717
+2024-08-19,58446
+2024-08-26,64328
+2024-09-02,57323
+2024-09-09,54857
+2024-09-16,59137
+2024-09-23,63626
+2024-09-30,65621
+2024-10-07,62815
+2024-10-14,62843
+2024-10-21,69012
+2024-10-28,67939
+2024-11-04,68744
+2024-11-11,80478
+2024-11-18,89829
+2024-11-25,98043
+2024-12-02,97274
+2024-12-09,101180
+2024-12-16,104342
+2024-12-23,95095
+2024-12-30,93536
+2025-01-06,98319
+2025-01-13,94478
+2025-01-20,101217
+2025-01-27,102593
+2025-02-03,97676
+2025-02-10,96487
+2025-02-17,96176
+2025-02-24,96275
+2025-03-03,94256
+2025-03-10,80669
+2025-03-17,82582
+2025-03-24,86057
+2025-03-31,82338
+2025-04-07,78372
+2025-04-14,83710
+2025-04-21,85173
+2025-04-28,93782
+2025-05-05,94312
+2025-05-12,104131
+2025-05-19,106425
+2025-05-26,109029
+2025-06-02,105701
+2025-06-09,105771
+2025-06-16,105559
+2025-06-23,100998
+2025-06-30,108386
+2025-07-07,109224
+2025-07-14,119095
+2025-07-21,117316
+2025-07-28,119462
+2025-08-04,114227
+2025-08-11,119295
+2025-08-18,117456
+2025-08-25,113468
+2025-09-01,108235
+2025-09-08,111175
+2025-09-15,115385
+2025-09-22,115317
+2025-09-29,112177
+2025-10-06,123519
+2025-10-13,115105
+2025-10-20,108688
+2025-10-27,114532
+2025-11-03,110602
+2025-11-10,104712
+2025-11-17,94188
+2025-11-24,86787
+2025-12-01,90376
+2025-12-08,90455
+2025-12-15,88166
+2025-12-22,88616
+2025-12-29,87835
+2026-01-05,91468
+2026-01-12,90818
+2026-01-19,93665
+2026-01-26,86571
+2026-02-02,76880
+2026-02-09,70285
+2026-02-16,68785
+2026-02-23,67615
+2026-03-02,65762
+2026-03-09,65941
+2026-03-16,72820
+2026-03-23,67850
+2026-03-30,65957
+2026-04-06,68997
+2026-04-13,70768
+2026-04-20,73857
+2026-04-27,78649
+2026-05-04,78543
+2026-05-11,82146
+2026-05-18,77409
+2026-05-25,76985
+2026-06-01,73571
+2026-06-08,63275
+2026-06-15,65713
+2026-06-22,63235
+2026-06-29,59497
+2026-07-06,63572
+2026-07-13,63744
+2026-07-20,64682
+2026-07-27,65335
+2026-08-03,63487
+2026-08-10,64855
+2026-08-17,62826
+2026-08-24,77701
+2026-08-31,77690
+2026-09-07,80341
+2026-09-14,76830
+2026-09-21,81136
+2026-09-28,84444
+</script>
+
+<!-- ===== 正式畫面 ===== -->
+<main id="view-main" class="wrap">
+  <header style="display:flex;flex-direction:column;gap:6px">
+    <h1>BTC 定投回算</h1>
+    <p class="lead">每週一定投 BTC，如果「跌比較多時多投一點」，投入金額和平均成本會怎麼變。</p>
+  </header>
+
+  <!-- 雲端存檔：登入 Supabase（只用來存條件，跟交易所無關）；不開放註冊，帳號在 Supabase 後台建 -->
+  <section id="cloud" class="panel" aria-labelledby="cloud-title">
+    <div class="row-between">
+      <h2 id="cloud-title">雲端存檔</h2>
+      <p class="hint">這裡登入的是 Supabase（只用來存條件），跟交易所無關</p>
+    </div>
+    <form id="auth-form" class="fields" novalidate>
+      <div class="field"><label for="email">Email</label><input id="email" type="email" autocomplete="username"></div>
+      <div class="field"><label for="password">密碼</label><input id="password" type="password" autocomplete="current-password"></div>
+      <button type="submit" id="login">登入</button>
+    </form>
+    <div id="auth-user" class="row-between" style="align-items:center" hidden>
+      <p>已登入：<strong id="auth-email"></strong></p>
+      <button type="button" id="logout" class="secondary">登出</button>
+    </div>
+    <p id="auth-msg" class="hint" role="status"></p>
+  </section>
+
+  <p id="data-status" class="note" role="status"></p>
+
+  <form id="form" class="panel" novalidate aria-labelledby="form-title">
+    <h2 id="form-title">設定規則</h2>
+    <div class="fields">
+      <div class="field"><label for="start">開始日期</label><input id="start" type="date" value="2022-01-03"></div>
+      <div class="field"><label for="end">結束日期</label><input id="end" type="date" value="2026-09-28"></div>
+      <div class="field"><label for="amount">每週金額（美元）</label><input id="amount" type="number" inputmode="decimal" step="any" value="100"></div>
+      <div class="field"><label for="indicator">加碼指標</label><select id="indicator" aria-describedby="indicator-source"></select><p class="hint" id="indicator-source" hidden></p></div>
+      <div class="field"><label for="op">條件</label><select id="op"><option value="&gt;">大於</option><option value="&lt;">小於</option></select></div>
+      <div class="field"><label for="threshold" id="threshold-label">門檻</label><input id="threshold" type="number" inputmode="decimal" step="any" value="30"></div>
+      <div class="field"><label for="multiplier">加碼倍數（倍，至少 1）</label><input id="multiplier" type="number" inputmode="decimal" step="any" value="2"></div>
+      <button type="submit">計算</button>
+      <button type="button" id="save" class="secondary" disabled>存到雲端</button>
+    </div>
+    <p class="hint">指標值「大於」（或「小於」）門檻就投「每週金額 × 加碼倍數」，剛好等於不算；指標「資料不足」的週不加碼。</p>
+    <p id="save-status" class="hint" role="status"></p>
+    <div id="readback-msg" class="alert" role="status" hidden></div>
+  </form>
+
+  <div id="indicator-errors" class="alert" role="status" hidden></div>
+
+  <div id="error" class="alert" role="alert" hidden></div>
+
+  <section id="results" hidden aria-labelledby="result-title" style="display:flex;flex-direction:column;gap:16px">
+    <div class="row-between">
+      <h2 id="result-title">回算結果</h2>
+      <p id="period"></p>
+    </div>
+    <div class="cards" id="cards"></div>
+    <div class="note">
+      <p>用當天均價回算・沒算手續費・實際不一定買得到這個價</p>
+      <p>過去結果不代表未來，也不是投資建議</p>
+    </div>
+  </section>
+
+  <section id="detail" hidden class="panel table-panel" aria-labelledby="table-title">
+    <div class="row-between"><h2 id="table-title">逐週明細</h2></div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th scope="col">日期</th><th scope="col">價格</th><th scope="col" id="ind-head">指標值</th><th scope="col">只定期定額</th><th scope="col">加碼規則</th></tr></thead>
+        <tbody id="weeks"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- ===== 驗收模式（#test-w1） ===== -->
+<main id="view-test" class="wrap" hidden>
+  <header style="display:flex;flex-direction:column;gap:10px">
+    <div class="row-between" style="align-items:center">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
+        <h1>驗收模式 W1</h1><span class="tag">合成資料</span>
+      </div>
+      <button type="button" id="back">回到正式畫面</button>
+    </div>
+    <p class="lead">這裡的價格是假的，只用來驗算。和正式畫面呼叫同一個計算函式 <code>simulate()</code>，不會動到真實價格資料。</p>
+  </header>
+  <div id="test-summary" class="summary"></div>
+
+  <section class="panel table-panel" aria-labelledby="b-title">
+    <div class="row-between"><h2 id="b-title">B. 剛好跌 30%</h2></div>
+    <p class="hint" style="padding:0 24px">2026-01-05～2026-01-26，價格 100、80、70、60（這四筆就是完整歷史），每週 100、門檻 30%、2 倍。</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th scope="col">日期</th><th scope="col">價格</th><th scope="col">最高點</th><th scope="col">跌幅</th><th scope="col">預期投入</th><th scope="col">實際投入</th><th scope="col">結果</th></tr></thead>
+        <tbody id="b-weeks"></tbody>
+      </table>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th scope="col">加碼規則合計</th><th scope="col">預期</th><th scope="col">實際</th><th scope="col">結果</th></tr></thead>
+        <tbody id="b-totals"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel table-panel" aria-labelledby="b2-title">
+    <div class="row-between"><h2 id="b2-title">B 補充：鄰近門檻與改門檻</h2></div>
+    <p class="hint" style="padding:0 24px">每列是獨立的兩週案例：2026-01-05 價格 100,000，2026-01-12 用下表價格；每週 100、2 倍。比較第二週投入。</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th scope="col">第二週價格</th><th scope="col">門檻</th><th scope="col">跌幅</th><th scope="col">預期投入</th><th scope="col">實際投入</th><th scope="col">結果</th></tr></thead>
+        <tbody id="b2-rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- ===== 計算（正式畫面與驗收模式共用，只吃傳進來的資料） ===== -->
+<script id="calc">
+function parseCsv(text) {
+  return text.trim().split(/\r?\n/).slice(1).map(function (line) {
+    var parts = line.split(',');
+    return { date: parts[0].trim(), price: Number(parts[1]) };
+  }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+}
+
+var INSUFFICIENT = '資料不足';
+
+// history：完整歷史（依日期排序）；s：{ start, end, amount, indicator, op('>' 或 '<'), threshold, multiplier }
+// 指標只拿得到截至當週（含）的資料；指標出錯就整次不給結果，回 { weeks: [], error }
+function simulate(history, s) {
+  var ind = s.indicator, weeks = [];
+  for (var i = 0; i < history.length; i++) {
+    var r = history[i];
+    if (r.date < s.start || r.date > s.end) continue;
+    // 開始日期前的價格也給指標用。ponytail: 每週複製一次歷史，O(n²)；幾千週內都很快，再大才改成傳索引
+    var past = history.slice(0, i + 1), v;
+    try {
+      v = past.length < (ind.weeksNeeded || 1) ? INSUFFICIENT : ind.compute(past);
+    } catch (e) {
+      return { weeks: [], error: '「' + ind.name + '」計算出錯：' + (e && e.message || e) };
+    }
+    if (typeof v === 'number') v = { value: v };
+    if (v !== INSUFFICIENT && !(v && typeof v.value === 'number' && isFinite(v.value))) {
+      return { weeks: [], error: '「' + ind.name + '」計算出錯：' + r.date + ' 算出來的不是數字' };
+    }
+    // 剛好等於門檻不算
+    var boost = v !== INSUFFICIENT && (s.op === '<' ? v.value < s.threshold : v.value > s.threshold);
+    weeks.push({
+      date: r.date, price: r.price, ind: v,
+      dca: s.amount,
+      plan: boost ? s.amount * s.multiplier : s.amount
+    });
+  }
+  if (!weeks.length) return { weeks: weeks };
+  var last = weeks[weeks.length - 1].price;
+  function total(key) {
+    var invested = 0, btc = 0, boosts = 0;
+    weeks.forEach(function (w) {
+      invested += w[key];
+      btc += w[key] / w.price;
+      if (w[key] > s.amount) boosts++;
+    });
+    return { invested: invested, btc: btc, avg: invested / btc, boosts: boosts, value: btc * last };
+  }
+  return { weeks: weeks, dca: total('dca'), plan: total('plan') };
+}
+</script>
+
+<!-- ===== 畫面 ===== -->
+<script>
+var HISTORY = parseCsv(document.getElementById('btc-data').textContent);
+var BUILTIN_LAST = HISTORY[HISTORY.length - 1].date; // 內建資料最後一天（2026-09-28）
+var KRAKEN_URL = 'https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=1440';
+
+// Kraken 每日 K 線 → 內建資料之後、已過完的週一（日期用 UTC，第 6 個值是當天成交均價）；看不懂就丟錯
+function krakenMondays(json, after) {
+  if (!json || (json.error && json.error.length) || !json.result) throw new Error('看不懂回傳內容');
+  var key = Object.keys(json.result).filter(function (k) { return k !== 'last'; })[0];
+  var rows = json.result[key];
+  if (!Array.isArray(rows)) throw new Error('看不懂回傳內容');
+  var today = new Date().toISOString().slice(0, 10);
+  var out = [];
+  rows.forEach(function (row) {
+    var d = new Date(row[0] * 1000), date = d.toISOString().slice(0, 10), price = Math.round(Number(row[5]));
+    if (d.getUTCDay() !== 1 || date <= after || date >= today) return; // 今天還沒過完，不用
+    if (!(price > 0)) throw new Error('價格不是數字');
+    out.push({ date: date, price: price });
+  });
+  if (!out.length) throw new Error('沒有新的週一');
+  return out.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+}
+
+function setDataStatus(text, failed) {
+  el('data-status').textContent = text;
+  el('data-status').className = failed ? 'alert' : 'note';
+}
+
+var latestLoaded = null; // 抓價格的 Promise：抓到或抓不到都會結束（給雲端讀回等資料載入好用）
+function loadLatest() {
+  if (latestLoaded) return latestLoaded;
+  setDataStatus('正在抓最新價格…（抓到之前用內建資料，到 ' + BUILTIN_LAST + '）');
+  var ctrl = new AbortController();
+  var timer = setTimeout(function () { ctrl.abort(); }, 10000); // 10 秒沒回應就算抓不到
+  return latestLoaded = fetch(KRAKEN_URL, { signal: ctrl.signal })
+    .then(function (res) { if (!res.ok) throw new Error('HTTP ' + res.status); return res.json(); })
+    .then(function (json) {
+      var fresh = krakenMondays(json, BUILTIN_LAST);
+      var lastDate = fresh[fresh.length - 1].date;
+      HISTORY = HISTORY.concat(fresh);
+      setDataStatus('價格資料到 ' + lastDate + '・' + BUILTIN_LAST + ' 以前用內建資料（data/btc_weekly.csv），之後的週來源是 Kraken（當天成交均價）');
+      // 結束日期還是預設值、也還沒算過，才幫忙改成最新一天；已經算出的結果不偷改
+      if (el('end').value === BUILTIN_LAST && el('results').hidden) el('end').value = lastDate;
+    })
+    .catch(function () {
+      setDataStatus('抓不到最新價格，改用內建資料（到 ' + BUILTIN_LAST + '）', true);
+    })
+    .finally(function () { clearTimeout(timer); });
+}
+
+// ----- 指標插件：照 indicators/清單.js 一個一個載入；一個壞掉不影響其他 -----
+var INDICATORS = []; // 照清單順序：{ file, ind, status: 'loading' | 'ok' | 'error', error }
+var loadingEntry = null, listError = '';
+function registerIndicator(ind) { if (loadingEntry) loadingEntry.ind = ind; }
+
+function loadScript(src) {
+  return new Promise(function (resolve, reject) {
+    var tag = document.createElement('script');
+    tag.src = src;
+    tag.onload = resolve;
+    tag.onerror = function () { reject(new Error('找不到檔案')); };
+    document.head.appendChild(tag);
+  });
+}
+
+function loadIndicator(file) {
+  var entry = { file: file, status: 'loading' };
+  INDICATORS.push(entry);
+  loadingEntry = entry;
+  return loadScript('indicators/' + file).then(function () {
+    var ind = entry.ind;
+    // 檔案有語法錯誤或執行到一半出錯時，瀏覽器仍會算「載入完成」，只是沒登記到指標
+    if (!ind || typeof ind.name !== 'string' || typeof ind.compute !== 'function' || !ind.threshold) throw new Error('檔案壞掉，沒有登記到指標');
+    // 要上網抓資料的指標先標「準備中」，等正式畫面才請它抓（驗收模式不上網）
+    if (typeof ind.load !== 'function') entry.status = 'ok';
+  }).catch(function (e) {
+    entry.status = 'error';
+    entry.error = e.message;
+  }).then(function () {
+    loadingEntry = null;
+    renderIndicators();
+  });
+}
+
+var indicatorsLoaded = loadScript('indicators/清單.js').then(function () {
+  if (!Array.isArray(window.INDICATOR_FILES)) throw new Error('清單格式不對');
+  return INDICATOR_FILES.reduce(function (chain, file) {
+    return chain.then(function () { return loadIndicator(file); });
+  }, Promise.resolve());
+}).catch(function (e) {
+  listError = 'indicators/清單.js 載入失敗（' + e.message + '），沒有指標可以選';
+  renderIndicators();
+});
+
+// 只在正式畫面呼叫；每個網路指標只抓一次，10 秒沒回應算抓不到。回傳的 Promise 等全部抓完（成功或出錯）才結束
+function startNetworkIndicators() {
+  return Promise.all(INDICATORS.map(function (entry) {
+    if (entry.status !== 'loading' || entry.started || !entry.ind || typeof entry.ind.load !== 'function') return;
+    entry.started = true;
+    var timer;
+    return Promise.race([
+      Promise.resolve().then(function () { return entry.ind.load(); }),
+      new Promise(function (_, reject) { timer = setTimeout(function () { reject(new Error('10 秒沒回應')); }, 10000); })
+    ]).then(function () {
+      entry.status = 'ok';
+    }, function (e) {
+      entry.status = 'error';
+      entry.error = '抓不到資料' + (e && e.message ? '：' + e.message : '');
+    }).then(function () {
+      clearTimeout(timer);
+      renderIndicators();
+    });
+  }));
+}
+
+function indName(entry) { return entry.ind && typeof entry.ind.name === 'string' ? entry.ind.name : entry.file; }
+
+function renderIndicators() {
+  var sel = el('indicator'), keep = sel.value;
+  sel.innerHTML = '';
+  INDICATORS.forEach(function (entry, i) {
+    var label = indName(entry) + (entry.status === 'loading' ? '（準備中）' : entry.status === 'error' ? '（出錯）' : '');
+    var opt = new Option(label, String(i));
+    opt.disabled = entry.status !== 'ok';
+    sel.add(opt);
+  });
+  var chosen = INDICATORS[keep] && INDICATORS[keep].status === 'ok' ? keep : String(INDICATORS.findIndex(function (e) { return e.status === 'ok'; }));
+  if (chosen !== '-1') sel.value = chosen;
+
+  var errs = INDICATORS.filter(function (e) { return e.status === 'error'; }).map(function (e) {
+    return '「' + indName(e) + '」（' + e.file + '）' + e.error;
+  });
+  if (listError) errs.unshift(listError);
+  el('indicator-errors').textContent = errs.length ? '指標出錯：' + errs.join('；') + '。其他指標照常能用。' : '';
+  el('indicator-errors').hidden = !errs.length;
+  renderThresholdLabel();
+}
+
+function selectedIndicator() {
+  var entry = INDICATORS[el('indicator').value];
+  return entry && entry.status === 'ok' ? entry.ind : null;
+}
+
+function rangeText(t) { return t.min + '–' + t.max + (t.integer ? ' 整數' : ''); }
+
+function renderThresholdLabel() {
+  var ind = selectedIndicator();
+  el('threshold-label').textContent = ind ? '門檻（' + (ind.unit ? ind.unit + '，' : '') + rangeText(ind.threshold) + '）' : '門檻';
+  el('indicator-source').textContent = ind && ind.source ? '資料來源：' + ind.source : '';
+  el('indicator-source').hidden = !(ind && ind.source);
+}
+el('indicator').addEventListener('change', renderThresholdLabel);
+
+function esc(text) { return String(text).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+function fmtInd(v, ind) {
+  if (v === INSUFFICIENT) return INSUFFICIENT;
+  return v.value.toFixed(ind.digits == null ? 2 : ind.digits) + esc(ind.unit || '') +
+    (v.note ? ' <span class="hint">（' + esc(v.note) + '）</span>' : '');
+}
+
+function usd(v, digits) {
+  return '$' + v.toLocaleString('en-US', { minimumFractionDigits: digits == null ? 0 : digits, maximumFractionDigits: digits == null ? 2 : digits });
+}
+function el(id) { return document.getElementById(id); }
+
+function readSettings() {
+  var s = { start: el('start').value, end: el('end').value };
+  var amount = el('amount').value.trim(), threshold = el('threshold').value.trim(), multiplier = el('multiplier').value.trim();
+  if (!s.start || !s.end) return '請填開始日期和結束日期。';
+  if (s.start > s.end) return '開始日期晚於結束日期，請重新填寫。';
+  s.amount = Number(amount);
+  if (amount === '' || !isFinite(s.amount) || s.amount <= 0) return '每週金額要大於 0。';
+  s.indicator = selectedIndicator();
+  if (!s.indicator) return '請選一個能用的加碼指標（指標還在準備，或出錯了）。';
+  s.op = el('op').value;
+  var t = s.indicator.threshold;
+  s.threshold = Number(threshold);
+  if (!(t.integer ? /^-?\d+$/.test(threshold) : threshold !== '' && isFinite(s.threshold)) || s.threshold < t.min || s.threshold > t.max) {
+    return '「' + s.indicator.name + '」的門檻只接受 ' + t.min + ' 到 ' + t.max + (t.integer ? ' 的整數。' : ' 之間的數字。');
+  }
+  s.multiplier = Number(multiplier);
+  if (multiplier === '' || !isFinite(s.multiplier) || s.multiplier < 1) return '加碼倍數至少要 1。';
+  return s;
+}
+
+function clearResults() {
+  el('results').hidden = true;
+  el('detail').hidden = true;
+  el('cards').innerHTML = '';
+  el('weeks').innerHTML = '';
+  el('period').textContent = '';
+}
+
+function showError(msg) {
+  clearResults();
+  el('error').textContent = msg;
+  el('error').hidden = false;
+}
+
+function card(name, desc, t) {
+  return '<article class="card"><h3>' + name + '</h3><p class="hint">' + desc + '</p><dl>' +
+    '<div><dt>總投入</dt><dd>' + usd(t.invested) + '</dd></div>' +
+    '<div><dt>買到的 BTC</dt><dd>' + t.btc.toFixed(8) + '</dd></div>' +
+    '<div><dt>平均成本</dt><dd>' + usd(t.avg, 2) + '</dd></div>' +
+    '<div><dt>加碼次數</dt><dd>' + t.boosts + ' 次</dd></div>' +
+    '<div><dt>市值（期間最後一筆價格）</dt><dd>' + usd(t.value, 2) + '</dd></div>' +
+    '</dl></article>';
+}
+
+function calculate() {
+  clearResults();
+  el('error').hidden = true;
+  var s = readSettings();
+  if (typeof s === 'string') return showError(s);
+  var r = simulate(HISTORY, s);
+  if (r.error) return showError(r.error + '。換別的指標照常能算。');
+  if (!r.weeks.length) return showError('這段期間沒有價格資料。');
+
+  var first = r.weeks[0], last = r.weeks[r.weeks.length - 1];
+  var missing = r.weeks.filter(function (w) { return w.ind === INSUFFICIENT; }).length;
+  el('period').innerHTML = '實際期間 <span class="num">' + first.date + ' ～ ' + last.date + '</span>・共 <span class="num">' + r.weeks.length + '</span> 週（市值用 ' + last.date + ' 的 ' + usd(last.price) + ' 算）' +
+    (missing ? '<br>其中 <span class="num">' + missing + '</span> 週「' + esc(s.indicator.name) + '」資料不足，照每週金額投' : '');
+  el('cards').innerHTML =
+    card('只定期定額', '每週一固定投入每週金額。', r.dca) +
+    card('加碼規則', '「' + esc(s.indicator.name) + '」' + (s.op === '<' ? '小於' : '大於') + ' ' + s.threshold + esc(s.indicator.unit || '') + ' 的週，投入每週金額 × 加碼倍數。', r.plan);
+  el('ind-head').textContent = s.indicator.name;
+  el('weeks').innerHTML = r.weeks.map(function (w) {
+    return '<tr><td>' + w.date + '</td><td>' + usd(w.price) + '</td><td>' + fmtInd(w.ind, s.indicator) +
+      '</td><td>' + usd(w.dca) + '</td><td' + (w.plan > w.dca ? ' class="boost"' : '') + '>' + usd(w.plan) + '</td></tr>';
+  }).join('');
+  el('results').hidden = false;
+  el('detail').hidden = false;
+}
+
+el('form').addEventListener('submit', function (e) { e.preventDefault(); calculate(); });
+
+// ----- 雲端存檔（Supabase）：規則見 docs/需求單.md【雲端存檔】。只在正式畫面啟動，驗收模式不連 -----
+// 誰能讀寫哪一筆由資料庫的 RLS 擋（supabase/建表.sql），網頁這邊只是照著用
+var SUPABASE_JS = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js';
+var sb = null, cloudUser = null, cloudStarted = false, readFor = null, dataReady = null;
+// state：connecting 連接中／offline 連不上／signedout 沒登入／loading 等資料、讀回中／none 還沒存過／saving 存檔中／saved 已存／error 失敗
+var cloud = { state: 'connecting', msg: '', authMsg: '', savedAt: '', snapshot: '' };
+
+var OPS = { '大於': '>', '小於': '<' };
+function fileIndex(file) { return String(INDICATORS.findIndex(function (e) { return e.file === file; })); }
+function defaultIndicator() {
+  var i = fileIndex('drawdown.js'); // 需求單預設「距最高點跌幅」；它出錯就用第一個能用的
+  return INDICATORS[i] && INDICATORS[i].status === 'ok' ? i : String(INDICATORS.findIndex(function (e) { return e.status === 'ok'; }));
+}
+function same(v) { return v; }
+// 存的欄位 ↔ 畫面欄位；def 是需求單的預設值，toForm 把存的值換成欄位的值
+var FIELDS = [
+  { id: 'start', name: '開始日期', col: 'start_date', toForm: same, def: function () { return el('start').defaultValue; } },
+  { id: 'end', name: '結束日期', col: 'end_date', toForm: same, def: function () { return HISTORY[HISTORY.length - 1].date; } },
+  { id: 'amount', name: '每週金額', col: 'weekly_amount', toForm: same, def: function () { return el('amount').defaultValue; } },
+  { id: 'indicator', name: '加碼指標', col: 'indicator', toForm: fileIndex, def: defaultIndicator },
+  { id: 'op', name: '條件（大於或小於）', col: 'comparison', toForm: function (v) { return OPS[v]; }, def: function () { return '>'; } },
+  { id: 'threshold', name: '門檻', col: 'threshold', toForm: same, def: function () { return el('threshold').defaultValue; } },
+  { id: 'multiplier', name: '加碼倍數', col: 'multiplier', toForm: same, def: function () { return el('multiplier').defaultValue; } }
+];
+function setField(f, v) {
+  el(f.id).value = v == null ? '' : String(v); // 選單沒有這個選項時，值會變成 ''
+  if (f.id === 'indicator') renderThresholdLabel();
+}
+function formSnapshot() { return FIELDS.map(function (f) { return el(f.id).value; }).join('|'); }
+
+// 讀回來的條件跟手動填的用同一套檢查（readSettings）：一項一項填，填了這項就不過，這項改回預設值
+function applySaved(row) {
+  FIELDS.forEach(function (f) { setField(f, f.def()); });
+  function tryField(f) {
+    setField(f, f.toForm(row[f.col]));
+    if (el(f.id).value !== '' && typeof readSettings() !== 'string') return true;
+    setField(f, f.def());
+    return false;
+  }
+  // ponytail: 有些項要跟後面的項搭配才合法（例：存的開始日期晚於預設結束日期），沒過的再試一次；兩輪就夠，欄位再互相牽連才改
+  var bad = FIELDS.filter(function (f) { return !tryField(f); }).filter(function (f) { return !tryField(f); });
+  el('readback-msg').textContent = bad.length ? '讀回存好的條件時，' + bad.map(function (f) { return '「' + f.name + '」'; }).join('、') + '讀回來不對，改用預設值。' : '';
+  el('readback-msg').hidden = !bad.length;
+  return bad.length;
+}
+
+function fmtTime(iso) { return iso ? new Date(iso).toLocaleString('zh-TW', { hour12: false }) : ''; }
+
+function renderCloud() {
+  var on = !!cloudUser, st = cloud.state;
+  el('auth-form').hidden = on;
+  el('auth-user').hidden = !on;
+  el('auth-email').textContent = on ? cloudUser.email : '';
+  ['email', 'password', 'login'].forEach(function (id) { el(id).disabled = !sb; });
+  el('save').disabled = !on || st === 'loading' || st === 'saving';
+
+  var auth = st === 'connecting' ? '連接 Supabase 中…'
+    : st === 'offline' ? '連不上 Supabase（' + cloud.msg + '）：不能登入、不能存；照樣能算。'
+    : cloud.authMsg || (on ? '' : '沒登入：照樣能算，只是不能存到雲端。');
+  el('auth-msg').textContent = auth;
+  el('auth-msg').className = st === 'offline' || /失敗/.test(cloud.authMsg) ? 'alert' : 'hint';
+
+  var changed = formSnapshot() !== cloud.snapshot;
+  var save = {
+    connecting: '雲端：連接中…',
+    offline: '雲端：連不上，不能存。',
+    signedout: '雲端：沒登入，不能存。',
+    loading: '雲端：等價格和指標資料載入好，再讀回存好的條件…',
+    saving: '雲端：存檔中…',
+    none: '雲端：還沒存過，按「存到雲端」存目前的條件。',
+    saved: changed ? '雲端：畫面上的條件跟雲端存的不一樣，還沒存（雲端那份最後更新 ' + fmtTime(cloud.savedAt) + '）。'
+      : '雲端：已存到雲端（最後更新 ' + fmtTime(cloud.savedAt) + '）。',
+    error: '雲端：' + cloud.msg
+  }[st];
+  el('save-status').textContent = save;
+  el('save-status').className = st === 'error' ? 'alert' : st === 'saved' && !changed ? 'hint pass' : 'hint';
+}
+el('form').addEventListener('input', renderCloud);
+el('form').addEventListener('change', renderCloud);
+
+function initCloud() {
+  if (cloudStarted) return;
+  cloudStarted = true;
+  renderCloud();
+  loadScript('config.js').catch(function () { throw new Error('找不到 config.js'); })
+    .then(function () { return loadScript(SUPABASE_JS).catch(function () { throw new Error('Supabase 程式庫載不到，可能沒網路'); }); })
+    .then(function () {
+      if (!window.SUPABASE_URL || !window.SUPABASE_PUBLISHABLE_KEY) throw new Error('config.js 沒填網址或金鑰');
+      sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+      cloud.state = 'signedout';
+      renderCloud();
+      // 官方建議：回呼裡不要直接再呼叫 Supabase，排到下一輪做
+      sb.auth.onAuthStateChange(function (event, session) { setTimeout(function () { onAuth(session); }, 0); });
+    })
+    .catch(function (e) { cloud.state = 'offline'; cloud.msg = e.message; renderCloud(); });
+}
+
+function onAuth(session) {
+  cloudUser = session ? session.user : null;
+  if (!cloudUser) { readFor = null; cloud.state = 'signedout'; cloud.snapshot = ''; renderCloud(); return; }
+  // 同一個帳號這次打開網頁已經讀過就不重讀（切回分頁時 Supabase 會再通知一次，重讀會蓋掉正在改的欄位）
+  if (readFor === cloudUser.id) { renderCloud(); return; }
+  var id = readFor = cloudUser.id;
+  cloud.state = 'loading';
+  renderCloud();
+  dataReady.then(function () {
+    return sb.from('rules').select('*').eq('user_id', id).maybeSingle();
+  }).then(function (res) {
+    if (readFor !== id) return; // 讀回來之前已經登出或換帳號
+    if (res.error) throw res.error;
+    if (!res.data) {
+      cloud.state = 'none';
+    } else {
+      var bad = applySaved(res.data);
+      cloud.state = 'saved';
+      cloud.savedAt = res.data.updated_at;
+      cloud.snapshot = bad ? '' : formSnapshot(); // 有項目改用預設值，畫面就跟雲端不一樣
+      calculate(); // 照存好的條件重算
+    }
+    renderCloud();
+  }).catch(function (e) {
+    if (readFor !== id) return;
+    cloud.state = 'error';
+    cloud.msg = '讀回失敗（' + (e && e.message || e) + '），畫面用預設值。';
+    renderCloud();
+  });
+}
+
+el('auth-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  if (!sb) return;
+  var email = el('email').value.trim(), password = el('password').value;
+  if (!email || !password) { cloud.authMsg = '登入失敗：請填 email 和密碼。'; return renderCloud(); }
+  el('login').disabled = true;
+  cloud.authMsg = '登入中…';
+  renderCloud();
+  sb.auth.signInWithPassword({ email: email, password: password }).then(function (res) {
+    if (res.error) throw res.error;
+    el('password').value = '';
+    cloud.authMsg = '';
+  }).catch(function (err) {
+    var m = err && err.message || String(err);
+    cloud.authMsg = '登入失敗：' + (m === 'Invalid login credentials' ? 'email 或密碼不對。' : m);
+  }).then(renderCloud);
+});
+
+el('logout').addEventListener('click', function () {
+  if (!sb) return;
+  // 只有自己用：只清掉這個瀏覽器的登入，沒網路也登出得了
+  sb.auth.signOut({ scope: 'local' }).then(function () { cloud.authMsg = ''; onAuth(null); });
+});
+
+el('save').addEventListener('click', function () {
+  if (!sb || !cloudUser) return;
+  var s = readSettings(); // 跟按「計算」同一套檢查，填錯就不存
+  if (typeof s === 'string') { cloud.state = 'error'; cloud.msg = '沒存：' + s; return renderCloud(); }
+  var row = {
+    user_id: cloudUser.id, start_date: s.start, end_date: s.end, weekly_amount: s.amount,
+    indicator: INDICATORS[el('indicator').value].file, comparison: s.op === '<' ? '小於' : '大於',
+    threshold: s.threshold, multiplier: s.multiplier
+  };
+  var snap = formSnapshot(), id = cloudUser.id;
+  cloud.state = 'saving';
+  renderCloud();
+  // 一個帳號一筆：有就蓋掉，沒有就新增
+  sb.from('rules').upsert(row, { onConflict: 'user_id' }).select('updated_at').single().then(function (res) {
+    if (readFor !== id) return;
+    if (res.error) throw res.error;
+    cloud.state = 'saved';
+    cloud.savedAt = res.data.updated_at;
+    cloud.snapshot = snap;
+    el('readback-msg').hidden = true;
+    renderCloud();
+  }).catch(function (e) {
+    if (readFor !== id) return;
+    cloud.state = 'error';
+    cloud.msg = '存失敗（' + (e && e.message || e) + '），雲端還是上一次存的那份。';
+    renderCloud();
+  });
+});
+
+// ----- 驗收模式：預期值照 docs/W1_標準答案.md 抄寫，實際值一律由 simulate() 算 -----
+function mark(ok) { return ok ? '<td class="pass">相符</td>' : '<td class="fail">不符</td>'; }
+
+function runTests() {
+  var pass = 0, count = 0;
+  function check(ok) { count++; if (ok) pass++; return mark(ok); }
+
+  var bHistory = [
+    { date: '2026-01-05', price: 100 }, { date: '2026-01-12', price: 80 },
+    { date: '2026-01-19', price: 70 }, { date: '2026-01-26', price: 60 }
+  ];
+  // 距最高點跌幅一律用 indicators/drawdown.js 載入的那個；沒載入成功，B 和 E 就會標「不符」
+  var ddEntry = INDICATORS.filter(function (e) { return e.file === 'drawdown.js' && e.status === 'ok'; })[0];
+  var DD = ddEntry ? ddEntry.ind : { name: 'drawdown.js（沒載入成功）', compute: function () { throw new Error('沒載入成功'); } };
+  var base = { start: '2026-01-05', end: '2026-01-26', amount: 100, multiplier: 2 };
+  function setting(extra) { return Object.assign({}, base, extra); }
+
+  var b = simulate(bHistory, setting({ indicator: DD, op: '>', threshold: 30 }));
+  var expected = [100, 100, 100, 200];
+  el('b-weeks').innerHTML = expected.map(function (exp, i) {
+    var w = b.weeks[i];
+    if (!w) return '<tr><td>第 ' + (i + 1) + ' 週</td><td>—</td><td>—</td><td>—</td><td>' + exp + '</td><td>（沒有算出）</td>' + check(false) + '</tr>';
+    return '<tr><td>' + w.date + '</td><td>' + w.price + '</td><td>' + esc(w.ind.note || '') + '</td><td>' + w.ind.value.toFixed(2) + '%</td><td>' + exp + '</td><td>' + w.plan + '</td>' + check(w.plan === exp) + '</tr>';
+  }).join('');
+  var p = b.plan || { invested: NaN, btc: NaN, avg: NaN };
+  el('b-totals').innerHTML =
+    '<tr><td>總投入</td><td>500</td><td>' + p.invested + '</td>' + check(p.invested === 500) + '</tr>' +
+    '<tr><td>買到的 BTC（6 位）</td><td>7.011905</td><td>' + p.btc.toFixed(6) + '</td>' + check(p.btc.toFixed(6) === '7.011905') + '</tr>' +
+    '<tr><td>平均成本（2 位）</td><td>71.31</td><td>' + p.avg.toFixed(2) + '</td>' + check(p.avg.toFixed(2) === '71.31') + '</tr>';
+
+  var cases = [[70001, 30, 100], [70000, 30, 100], [69999, 30, 200], [80000, 20, 100], [79999, 20, 200]];
+  el('b2-rows').innerHTML = cases.map(function (c) {
+    var h = [{ date: '2026-01-05', price: 100000 }, { date: '2026-01-12', price: c[0] }];
+    var r = simulate(h, { start: '2026-01-05', end: '2026-01-12', amount: 100, indicator: DD, op: '>', threshold: c[1], multiplier: 2 });
+    var w = r.weeks[1];
+    var actual = w ? w.plan : '（沒有算出）';
+    return '<tr><td>' + c[0].toLocaleString('en-US') + '</td><td>' + c[1] + '%</td><td>' + (w ? w.ind.value.toFixed(3) + '%' : '—') +
+      '</td><td>$' + c[2] + '</td><td>' + (w ? '$' + actual : actual) + '</td>' + check(actual === c[2]) + '</tr>';
+  }).join('');
+
+  var box = el('test-summary');
+  box.className = 'summary ' + (pass === count ? 'ok' : 'bad');
+  box.textContent = pass === count ? '全部相符：' + pass + ' / ' + count + ' 項' : '有不符：' + pass + ' / ' + count + ' 項相符，請看下面標紅的列';
+}
+
+function route() {
+  var test = location.hash === '#test-w1';
+  el('view-main').hidden = test;
+  el('view-test').hidden = !test;
+  if (test) {
+    el('test-summary').className = 'summary';
+    el('test-summary').textContent = '載入指標中…';
+    indicatorsLoaded.then(runTests);
+  } else {
+    // 驗收模式不上網抓（價格和指標資料都是），也不連 Supabase
+    dataReady = dataReady || Promise.all([loadLatest(), indicatorsLoaded.then(startNetworkIndicators)]);
+    initCloud();
+  }
+  window.scrollTo(0, 0);
+}
+el('back').addEventListener('click', function () {
+  try { history.replaceState(null, '', location.pathname + location.search); }
+  catch (e) { location.hash = ''; } // 有些瀏覽器的 file:// 不允許改網址，退回清空 #
+  route();
+});
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>

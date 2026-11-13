@@ -1,0 +1,10 @@
+{
+  "crons": [
+    { "path": "/api/check", "schedule": "0 1 * * *" }
+  ],
+  "functions": {
+    "api/check.js": {
+      "includeFiles": "{calc.js,data/btc_weekly.csv,indicators/**}"
+    }
+  }
+}

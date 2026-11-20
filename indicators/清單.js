@@ -3,4 +3,5 @@
 var INDICATOR_FILES = [
   'drawdown.js',
   'fear_greed.js',
+  'streak.js',
 ];
